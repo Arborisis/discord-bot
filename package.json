@@ -1,0 +1,28 @@
+{
+  "name": "arborisis-discord-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord officiel d'Arborisis",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy-commands": "node src/services/commands.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "arborisis"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "axios": "^1.7",
+    "discord.js": "^14.15",
+    "dotenv": "^16.4",
+    "express": "^4.19",
+    "opusscript": "^0.0.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
