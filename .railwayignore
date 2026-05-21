@@ -1,0 +1,46 @@
+# Railway Ignore - Discord Bot
+# Ces fichiers ne seront pas envoyés à Railway
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Tests
+tests/
+*.test.js
+*.spec.js
+
+# CI/CD (non nécessaire sur Railway)
+.github/
+.gitlab-ci.yml
+
+# Docker local
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# PM2 local
+ecosystem.config.js
