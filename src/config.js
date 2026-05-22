@@ -17,8 +17,8 @@ module.exports = {
     ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
   },
   api: {
-    port: parseInt(process.env.BOT_PORT || '3001', 10),
-    host: process.env.BOT_HOST || '127.0.0.1',
+    port: parseInt(process.env.PORT || process.env.BOT_PORT || '3001', 10),
+    host: process.env.BOT_HOST || '0.0.0.0',
     laravelUrl: process.env.LARAVEL_API_URL || 'http://localhost/api',
     laravelToken: process.env.LARAVEL_INTERNAL_TOKEN,
   },
