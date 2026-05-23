@@ -38,7 +38,6 @@ tests/
 .gitlab-ci.yml
 
 # Docker local
-Dockerfile
 docker-compose.yml
 .dockerignore
 
