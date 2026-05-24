@@ -22,19 +22,40 @@ let activeConnection = null;
 let activeChannelId = null;
 let reconnectTimer = null;
 let currentFfmpeg = null;
+let healthCheckTimer = null;
+const STDERR_ERROR_WINDOW_MS = 5000;
+const STDERR_ERROR_THRESHOLD = 20;
 
 function createRadioResource() {
-  if (currentFfmpeg) {
-    currentFfmpeg.kill('SIGKILL');
-    currentFfmpeg = null;
+  if (healthCheckTimer) {
+    clearTimeout(healthCheckTimer);
+    healthCheckTimer = null;
   }
+
+  if (currentFfmpeg) {
+    const oldFfmpeg = currentFfmpeg;
+    currentFfmpeg = null;
+    oldFfmpeg.removeAllListeners();
+    oldFfmpeg.kill('SIGTERM');
+    setTimeout(() => {
+      if (!oldFfmpeg.killed) {
+        oldFfmpeg.kill('SIGKILL');
+      }
+    }, 2000);
+  }
+
+  const stderrTimestamps = [];
 
   const ffmpeg = spawn(config.radio.ffmpegPath, [
     '-hide_banner',
     '-loglevel', 'warning',
+    '-fflags', '+discardcorrupt',
     '-reconnect', '1',
     '-reconnect_streamed', '1',
     '-reconnect_delay_max', '5',
+    '-reconnect_at_eof', '1',
+    '-rw_timeout', '10000000',
+    '-user_agent', 'Mozilla/5.0 (DiscordBot)',
     '-i', config.radio.streamUrl,
     '-vn',
     '-filter:a', 'volume=0.85',
@@ -55,7 +76,20 @@ function createRadioResource() {
     const message = chunk.toString().trim();
     if (message) {
       console.error('[RadioVoice:ffmpeg]', message);
+      const now = Date.now();
+      stderrTimestamps.push(now);
+      while (stderrTimestamps.length > 0 && now - stderrTimestamps[0] > STDERR_ERROR_WINDOW_MS) {
+        stderrTimestamps.shift();
+      }
+      if (stderrTimestamps.length >= STDERR_ERROR_THRESHOLD) {
+        console.error(`[RadioVoice] FFmpeg emitted ${stderrTimestamps.length} errors in ${STDERR_ERROR_WINDOW_MS}ms — killing corrupt stream`);
+        ffmpeg.kill('SIGKILL');
+      }
     }
+  });
+
+  ffmpeg.on('error', (err) => {
+    console.error('[RadioVoice] FFmpeg process error:', err.message);
   });
 
   ffmpeg.on('close', (code, signal) => {
@@ -66,6 +100,13 @@ function createRadioResource() {
       console.error(`[RadioVoice] FFmpeg exited with code ${code} signal ${signal}`);
     }
   });
+
+  healthCheckTimer = setTimeout(() => {
+    if (currentFfmpeg === ffmpeg && player.state.status !== AudioPlayerStatus.Playing && activeChannelId) {
+      console.warn('[RadioVoice] Health check failed — stream not playing after 15s, restarting');
+      ffmpeg.kill('SIGKILL');
+    }
+  }, 15000);
 
   return createAudioResource(ffmpeg.stdout, {
     inputType: StreamType.OggOpus,
@@ -157,6 +198,10 @@ function leave() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
+  }
+  if (healthCheckTimer) {
+    clearTimeout(healthCheckTimer);
+    healthCheckTimer = null;
   }
   activeChannelId = null;
   player.stop(true);
