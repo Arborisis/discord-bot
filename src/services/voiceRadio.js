@@ -23,8 +23,12 @@ let activeChannelId = null;
 let reconnectTimer = null;
 let currentFfmpeg = null;
 let healthCheckTimer = null;
+let idleRestartTimer = null;
+let consecutiveFailures = 0;
 const STDERR_ERROR_WINDOW_MS = 5000;
 const STDERR_ERROR_THRESHOLD = 20;
+const MAX_RETRIES = 10;
+const BASE_RETRY_DELAY_MS = 2000;
 
 function createRadioResource() {
   if (healthCheckTimer) {
@@ -114,6 +118,11 @@ function createRadioResource() {
 }
 
 function playStream() {
+  if (idleRestartTimer) {
+    clearTimeout(idleRestartTimer);
+    idleRestartTimer = null;
+  }
+
   const resource = createRadioResource();
   player.play(resource);
 }
@@ -203,6 +212,11 @@ function leave() {
     clearTimeout(healthCheckTimer);
     healthCheckTimer = null;
   }
+  if (idleRestartTimer) {
+    clearTimeout(idleRestartTimer);
+    idleRestartTimer = null;
+  }
+  consecutiveFailures = 0;
   activeChannelId = null;
   player.stop(true);
   if (currentFfmpeg) {
@@ -230,9 +244,28 @@ function status() {
 
 player.on(AudioPlayerStatus.Idle, () => {
   console.warn('[RadioVoice] Player idle, restarting stream');
-  if (activeChannelId) {
-    playStream();
+  if (!activeChannelId) return;
+
+  if (idleRestartTimer) {
+    clearTimeout(idleRestartTimer);
+    idleRestartTimer = null;
   }
+
+  consecutiveFailures++;
+
+  if (consecutiveFailures > MAX_RETRIES) {
+    console.error(`[RadioVoice] Max retries (${MAX_RETRIES}) exceeded — giving up on stream`);
+    leave();
+    return;
+  }
+
+  const delay = Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, consecutiveFailures - 1), 60000);
+  console.log(`[RadioVoice] Restarting stream in ${delay}ms (failure ${consecutiveFailures}/${MAX_RETRIES})`);
+
+  idleRestartTimer = setTimeout(() => {
+    idleRestartTimer = null;
+    playStream();
+  }, delay);
 });
 
 player.on(AudioPlayerStatus.Buffering, () => {
@@ -241,13 +274,28 @@ player.on(AudioPlayerStatus.Buffering, () => {
 
 player.on(AudioPlayerStatus.Playing, () => {
   console.log('[RadioVoice] Player playing');
+  if (consecutiveFailures > 0) {
+    console.log(`[RadioVoice] Stream recovered after ${consecutiveFailures} failure(s)`);
+    consecutiveFailures = 0;
+  }
 });
 
 player.on('error', (error) => {
   console.error('[RadioVoice] Player error:', error);
-  if (activeChannelId) {
-    setTimeout(playStream, 5000);
+  if (!activeChannelId) return;
+
+  consecutiveFailures++;
+
+  if (consecutiveFailures > MAX_RETRIES) {
+    console.error(`[RadioVoice] Max retries (${MAX_RETRIES}) exceeded — giving up on stream`);
+    leave();
+    return;
   }
+
+  const delay = Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, consecutiveFailures - 1), 60000);
+  console.log(`[RadioVoice] Restarting stream in ${delay}ms after player error (failure ${consecutiveFailures}/${MAX_RETRIES})`);
+
+  setTimeout(playStream, delay);
 });
 
 module.exports = {
