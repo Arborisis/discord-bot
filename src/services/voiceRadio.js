@@ -57,7 +57,6 @@ function createRadioResource() {
     '-reconnect', '1',
     '-reconnect_streamed', '1',
     '-reconnect_delay_max', '5',
-    '-reconnect_at_eof', '1',
     '-rw_timeout', '10000000',
     '-user_agent', 'Mozilla/5.0 (DiscordBot)',
     '-i', config.radio.streamUrl,
@@ -80,6 +79,9 @@ function createRadioResource() {
     const message = chunk.toString().trim();
     if (message) {
       console.error('[RadioVoice:ffmpeg]', message);
+      // Ignore Icecast metadata warnings and common MP3 stream artifacts
+      const isIgnorable = /invalid concatenated file|Header missing|bitrate for duration|Estimating duration from bitrate/i.test(message);
+      if (isIgnorable) return;
       const now = Date.now();
       stderrTimestamps.push(now);
       while (stderrTimestamps.length > 0 && now - stderrTimestamps[0] > STDERR_ERROR_WINDOW_MS) {
@@ -106,14 +108,14 @@ function createRadioResource() {
   });
 
   healthCheckTimer = setTimeout(() => {
-    if (currentFfmpeg === ffmpeg && player.state.status !== AudioPlayerStatus.Playing && activeChannelId) {
+    if (currentFfmpeg === ffmpeg && player.state.status !== AudioPlayerStatus.Playing && player.state.status !== AudioPlayerStatus.Buffering && activeChannelId) {
       console.warn('[RadioVoice] Health check failed — stream not playing after 15s, restarting');
       ffmpeg.kill('SIGKILL');
     }
   }, 15000);
 
   return createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.OggOpus,
+    inputType: StreamType.Opus,
   });
 }
 
