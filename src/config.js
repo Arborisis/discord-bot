@@ -10,7 +10,7 @@ module.exports = {
     radioAutoJoin: process.env.DISCORD_RADIO_AUTO_JOIN !== 'false',
   },
   radio: {
-    streamUrl: process.env.RADIO_STREAM_URL || process.env.RADIO_PUBLIC_STREAM_URL || 'https://arborisis.com/radio/stream',
+    streamUrl: process.env.RADIO_STREAM_URL || process.env.RADIO_PUBLIC_STREAM_URL || 'https://radio-server-production-54c0.up.railway.app/arborisis.mp3',
     textChannelId: process.env.DISCORD_RADIO_TEXT_CHANNEL_ID,
     embedColor: parseInt(process.env.DISCORD_RADIO_EMBED_COLOR || '2F7D5C', 16),
     syncIntervalMs: parseInt(process.env.DISCORD_RADIO_SYNC_INTERVAL_MS || '10000', 10),
