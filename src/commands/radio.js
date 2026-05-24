@@ -39,7 +39,7 @@ module.exports = {
     }
 
     if (subcommand === 'leave') {
-      radioVoice.leave();
+      await radioVoice.leave();
       await interaction.editReply({ content: '📻 Radio déconnectée du vocal.' });
       return;
     }

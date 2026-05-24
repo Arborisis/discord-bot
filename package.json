@@ -4,7 +4,7 @@
   "description": "Bot Discord officiel d'Arborisis",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "pm2-runtime start ecosystem.config.js --env production",
     "dev": "node --watch src/index.js",
     "deploy-commands": "node src/services/commands.js"
   },
@@ -21,7 +21,9 @@
     "discord.js": "^14.15",
     "dotenv": "^16.4",
     "express": "^4.19",
-    "opusscript": "^0.0.8"
+    "opusscript": "^0.0.8",
+    "pm2": "^7.0.1",
+    "shoukaku": "^4.3.0"
   },
   "engines": {
     "node": ">=20.0.0"
