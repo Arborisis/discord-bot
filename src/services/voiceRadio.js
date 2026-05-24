@@ -10,7 +10,23 @@ const {
   StreamType,
 } = require('@discordjs/voice');
 const { spawn } = require('child_process');
+const { PassThrough } = require('stream');
 const config = require('../config');
+
+// Stream audio persistant qui ne se termine jamais
+let audioPassThrough = null;
+let currentFfmpeg = null;
+let isShuttingDown = false;
+
+// État du player
+let activeConnection = null;
+let activeChannelId = null;
+let reconnectTimer = null;
+let healthCheckTimer = null;
+let idleRestartTimer = null;
+let consecutiveFailures = 0;
+const MAX_RETRIES = 10;
+const BASE_RETRY_DELAY_MS = 2000;
 
 const player = createAudioPlayer({
   behaviors: {
@@ -18,42 +34,28 @@ const player = createAudioPlayer({
   },
 });
 
-let activeConnection = null;
-let activeChannelId = null;
-let reconnectTimer = null;
-let currentFfmpeg = null;
-let healthCheckTimer = null;
-let idleRestartTimer = null;
-let consecutiveFailures = 0;
-const STDERR_ERROR_WINDOW_MS = 5000;
-const STDERR_ERROR_THRESHOLD = 20;
-const MAX_RETRIES = 10;
-const BASE_RETRY_DELAY_MS = 2000;
+function getAudioStream() {
+  if (!audioPassThrough || audioPassThrough.destroyed) {
+    audioPassThrough = new PassThrough();
+    audioPassThrough.on('error', (err) => {
+      console.error('[RadioVoice] PassThrough error:', err.message);
+    });
+  }
+  return audioPassThrough;
+}
 
-function createRadioResource() {
-  if (healthCheckTimer) {
-    clearTimeout(healthCheckTimer);
-    healthCheckTimer = null;
+function startFfmpeg() {
+  if (isShuttingDown) return;
+  if (currentFfmpeg && !currentFfmpeg.killed) {
+    currentFfmpeg.removeAllListeners();
+    currentFfmpeg.kill('SIGKILL');
   }
 
-  if (currentFfmpeg) {
-    const oldFfmpeg = currentFfmpeg;
-    currentFfmpeg = null;
-    oldFfmpeg.removeAllListeners();
-    oldFfmpeg.kill('SIGTERM');
-    setTimeout(() => {
-      if (!oldFfmpeg.killed) {
-        oldFfmpeg.kill('SIGKILL');
-      }
-    }, 2000);
-  }
-
-  const stderrTimestamps = [];
+  const stream = getAudioStream();
 
   const ffmpeg = spawn(config.radio.ffmpegPath, [
     '-hide_banner',
-    '-loglevel', 'warning',
-    '-fflags', '+discardcorrupt',
+    '-loglevel', 'error',
     '-reconnect', '1',
     '-reconnect_streamed', '1',
     '-reconnect_delay_max', '5',
@@ -75,46 +77,60 @@ function createRadioResource() {
 
   currentFfmpeg = ffmpeg;
 
-  ffmpeg.stderr.on('data', chunk => {
+  ffmpeg.stdout.pipe(stream, { end: false });
+
+  ffmpeg.stderr.on('data', (chunk) => {
     const message = chunk.toString().trim();
     if (message) {
       console.error('[RadioVoice:ffmpeg]', message);
-      // Ignore Icecast metadata warnings and common MP3 stream artifacts
-      const isIgnorable = /invalid concatenated file|Header missing|bitrate for duration|Estimating duration from bitrate/i.test(message);
-      if (isIgnorable) return;
-      const now = Date.now();
-      stderrTimestamps.push(now);
-      while (stderrTimestamps.length > 0 && now - stderrTimestamps[0] > STDERR_ERROR_WINDOW_MS) {
-        stderrTimestamps.shift();
-      }
-      if (stderrTimestamps.length >= STDERR_ERROR_THRESHOLD) {
-        console.error(`[RadioVoice] FFmpeg emitted ${stderrTimestamps.length} errors in ${STDERR_ERROR_WINDOW_MS}ms — killing corrupt stream`);
-        ffmpeg.kill('SIGKILL');
-      }
     }
   });
 
   ffmpeg.on('error', (err) => {
-    console.error('[RadioVoice] FFmpeg process error:', err.message);
+    if (!isShuttingDown) {
+      console.error('[RadioVoice] FFmpeg error:', err.message);
+      setTimeout(startFfmpeg, 500);
+    }
   });
 
   ffmpeg.on('close', (code, signal) => {
-    if (currentFfmpeg === ffmpeg) {
-      currentFfmpeg = null;
-    }
-    if (code !== 0 && activeChannelId) {
-      console.error(`[RadioVoice] FFmpeg exited with code ${code} signal ${signal}`);
+    if (!isShuttingDown && activeChannelId) {
+      console.error(`[RadioVoice] FFmpeg exited (${code}/${signal}), restarting...`);
+      setTimeout(startFfmpeg, 500);
     }
   });
 
+  console.log('[RadioVoice] FFmpeg started');
+}
+
+function stopFfmpeg() {
+  isShuttingDown = true;
+  if (currentFfmpeg && !currentFfmpeg.killed) {
+    currentFfmpeg.removeAllListeners();
+    currentFfmpeg.kill('SIGKILL');
+    currentFfmpeg = null;
+  }
+}
+
+function createRadioResource() {
+  // Démarrer FFmpeg s'il n'est pas déjà en cours
+  if (!currentFfmpeg || currentFfmpeg.killed) {
+    isShuttingDown = false;
+    startFfmpeg();
+  }
+
+  const stream = getAudioStream();
+
+  // Health check - vérifie que FFmpeg est toujours en vie
+  if (healthCheckTimer) clearTimeout(healthCheckTimer);
   healthCheckTimer = setTimeout(() => {
-    if (currentFfmpeg === ffmpeg && player.state.status !== AudioPlayerStatus.Playing && player.state.status !== AudioPlayerStatus.Buffering && activeChannelId) {
-      console.warn('[RadioVoice] Health check failed — stream not playing after 15s, restarting');
-      ffmpeg.kill('SIGKILL');
+    if (activeChannelId && (!currentFfmpeg || currentFfmpeg.killed)) {
+      console.warn('[RadioVoice] Health check failed — FFmpeg not running, restarting');
+      startFfmpeg();
     }
   }, 15000);
 
-  return createAudioResource(ffmpeg.stdout, {
+  return createAudioResource(stream, {
     inputType: StreamType.OggOpus,
   });
 }
@@ -221,9 +237,10 @@ function leave() {
   consecutiveFailures = 0;
   activeChannelId = null;
   player.stop(true);
-  if (currentFfmpeg) {
-    currentFfmpeg.kill('SIGKILL');
-    currentFfmpeg = null;
+  stopFfmpeg();
+  if (audioPassThrough) {
+    audioPassThrough.destroy();
+    audioPassThrough = null;
   }
   activeConnection?.destroy();
   activeConnection = null;
