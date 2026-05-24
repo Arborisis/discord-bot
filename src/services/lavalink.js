@@ -48,7 +48,7 @@ async function initLavalink(client) {
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Lavalink connection timeout'));
-    }, 30000);
+    }, 60000);
 
     shoukaku.once('ready', () => {
       clearTimeout(timeout);
