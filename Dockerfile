@@ -24,5 +24,8 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 COPY application.yml ./
+COPY ecosystem.config.js ./
+COPY start.sh ./
+RUN chmod +x start.sh
 
-CMD ["npm", "run", "start"]
+CMD ["./start.sh"]
