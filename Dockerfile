@@ -1,7 +1,13 @@
 FROM node:22-bookworm-slim
 
-# Installer ffmpeg (requis pour la radio Discord)
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+# Installer ffmpeg et les outils de compilation pour @discordjs/opus
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    python3 \
+    make \
+    g++ \
+    libopus-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
