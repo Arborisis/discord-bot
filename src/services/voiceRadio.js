@@ -61,13 +61,10 @@ function createRadioResource() {
     '-user_agent', 'Mozilla/5.0 (DiscordBot)',
     '-i', config.radio.streamUrl,
     '-vn',
-    '-filter:a', 'volume=0.85',
+    '-af', 'volume=0.85',
     '-ac', '2',
     '-ar', '48000',
-    '-c:a', 'libopus',
-    '-b:a', '96k',
-    '-application', 'audio',
-    '-f', 'opus',
+    '-f', 's16le',
     'pipe:1',
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -115,7 +112,7 @@ function createRadioResource() {
   }, 15000);
 
   return createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.Opus,
+    inputType: StreamType.Raw,
   });
 }
 
