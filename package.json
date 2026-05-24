@@ -21,9 +21,7 @@
     "discord.js": "^14.15",
     "dotenv": "^16.4",
     "express": "^4.19",
-    "opusscript": "^0.0.8",
-    "pm2": "^7.0.1",
-    "shoukaku": "^4.3.0"
+    "opusscript": "^0.0.8"
   },
   "engines": {
     "node": ">=20.0.0"

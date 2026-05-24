@@ -10,14 +10,6 @@ module.exports = {
     console.log(`[Discord] Connecté en tant que ${client.user.tag}`);
     client.user.setActivity('les sons de la nature', { type: ActivityType.Listening });
 
-    // Initialiser Lavalink
-    try {
-      await radioVoice.init(client);
-      console.log('[RadioVoice] Lavalink ready');
-    } catch (error) {
-      console.error('[RadioVoice] Failed to initialize Lavalink:', error);
-    }
-
     if (config.discord.radioAutoJoin && config.discord.radioVoiceChannelId) {
       radioVoice.joinConfiguredChannel(client)
         .then(channel => console.log(`[RadioVoice] Streaming dans ${channel.name}`))
