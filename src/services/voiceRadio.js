@@ -35,9 +35,16 @@ const player = createAudioPlayer({
 });
 
 function getAudioStream() {
-  if (!audioPassThrough || audioPassThrough.destroyed) {
+  if (!audioPassThrough || audioPassThrough.destroyed || audioPassThrough.closed) {
+    if (audioPassThrough) {
+      console.warn('[RadioVoice] PassThrough was closed, recreating');
+    }
     audioPassThrough = new PassThrough();
     audioPassThrough.on('error', (err) => {
+      if (err.message && err.message.includes('Premature close')) {
+        console.warn('[RadioVoice] PassThrough premature close detected');
+        return;
+      }
       console.error('[RadioVoice] PassThrough error:', err.message);
     });
   }
@@ -113,6 +120,13 @@ function stopFfmpeg() {
 }
 
 function createRadioResource() {
+  // Si le PassThrough est fermé, tout redémarrer
+  if (audioPassThrough && (audioPassThrough.destroyed || audioPassThrough.closed)) {
+    console.log('[RadioVoice] PassThrough closed, restarting FFmpeg with new stream');
+    stopFfmpeg();
+    audioPassThrough = null;
+  }
+
   // Démarrer FFmpeg s'il n'est pas déjà en cours
   if (!currentFfmpeg || currentFfmpeg.killed) {
     isShuttingDown = false;
@@ -278,7 +292,8 @@ player.on(AudioPlayerStatus.Idle, () => {
     return;
   }
 
-  const delay = Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, consecutiveFailures - 1), 60000);
+  // Pour les streams radio, redémarrer rapidement
+  const delay = consecutiveFailures <= 2 ? 500 : Math.min(BASE_RETRY_DELAY_MS * Math.pow(2, consecutiveFailures - 1), 30000);
   console.log(`[RadioVoice] Restarting stream in ${delay}ms (failure ${consecutiveFailures}/${MAX_RETRIES})`);
 
   idleRestartTimer = setTimeout(() => {
