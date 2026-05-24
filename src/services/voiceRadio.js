@@ -64,7 +64,10 @@ function createRadioResource() {
     '-af', 'volume=0.85',
     '-ac', '2',
     '-ar', '48000',
-    '-f', 's16le',
+    '-c:a', 'libopus',
+    '-b:a', '96k',
+    '-application', 'audio',
+    '-f', 'ogg',
     'pipe:1',
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -112,7 +115,7 @@ function createRadioResource() {
   }, 15000);
 
   return createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.Raw,
+    inputType: StreamType.OggOpus,
   });
 }
 
